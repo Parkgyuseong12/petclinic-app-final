@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# 1. 패키지 목록 업데이트 및 MySQL 클라이언트 설치
+apt-get update -y
+apt-get install -y mysql-client
+
+# 2. 초기화 SQL 파일 생성 (데이터베이스 및 사용자 생성)
+# DMS가 테이블과 데이터는 옮겨주므로, 여기서는 '껍데기(DB)'와 '계정'만 생성합니다.
+cat <<EOF > /tmp/init_schema.sql
+-- =============================================================================
+-- 1. 데이터베이스(Schema) 생성
+-- =============================================================================
+CREATE DATABASE IF NOT EXISTS customers_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS vets_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS visits_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- 2. 사용자(User) 생성 및 권한 부여 (DMS가 이관하지 않음)
+-- =============================================================================
+-- customers_user
+CREATE USER IF NOT EXISTS 'customers_user'@'%' IDENTIFIED BY 'customers1234';
+GRANT ALL PRIVILEGES ON customers_db.* TO 'customers_user'@'%';
+
+-- vets_user
+CREATE USER IF NOT EXISTS 'vets_user'@'%' IDENTIFIED BY 'vets1234';
+GRANT ALL PRIVILEGES ON vets_db.* TO 'vets_user'@'%';
+
+-- visits_user
+CREATE USER IF NOT EXISTS 'visits_user'@'%' IDENTIFIED BY 'visits1234';
+GRANT ALL PRIVILEGES ON visits_db.* TO 'visits_user'@'%';
+
+-- 권한 적용
+FLUSH PRIVILEGES;
+EOF
+
+# 3. Azure MySQL에 접속하여 SQL 실행
+# 접속 실패 시 재시도 로직 추가 (DB가 늦게 뜰 수 있음)
+for i in {1..10}; do
+  if mysql -h ${db_host} -u ${db_admin} -p${db_password} < /tmp/init_schema.sql; then
+    echo "SQL Initialization Completed Successfully."
+    rm -f /tmp/init_schema.sql
+    exit 0
+  else
+    echo "Connection failed, retrying in 10s... ($i/10)"
+    sleep 10
+  fi
+done
+
+echo "SQL Initialization Failed."
