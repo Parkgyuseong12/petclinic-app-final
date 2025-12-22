@@ -36,10 +36,18 @@ output "all_private_subnet_ids" {
   value       = concat(module.vpc.app_private_subnet_ids, module.vpc.db_private_subnet_ids)
 }
 
-output "nat_gateway_ips" {
-  description = "NAT Gateway Public IPs (HA)"
-  value       = module.vpc.nat_gateway_ips
+# Tunnel 1 정보
+output "vpn_tunnel1_address" {
+  description = "The public IP address of the first VPN tunnel"
+  value       = module.vpc.vpn_tunnel1_address
 }
+
+output "vpn_tunnel1_preshared_key" {
+  description = "The preshared key of the first VPN tunnel"
+  value       = module.vpc.vpn_tunnel1_preshared_key
+  sensitive   = true 
+}
+
 
 # -----------------------------------------------------------------------------
 # EC2 Outputs

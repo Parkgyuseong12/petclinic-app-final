@@ -37,11 +37,6 @@ output "nat_gateway_ids" {
   value       = aws_nat_gateway.main[*].id
 }
 
-output "nat_gateway_ips" {
-  description = "NAT Gateway Public IPs"
-  value       = aws_eip.nat[*].public_ip
-}
-
 output "public_route_table_id" {
   description = "Public Route Table ID"
   value       = aws_route_table.public.id
@@ -57,3 +52,13 @@ output "db_private_route_table_ids" {
   value       = aws_route_table.private_db[*].id
 }
 
+output "vpn_tunnel1_address" {
+  description = "VPN Tunnel 1 Public IP"
+  value       = aws_vpn_connection.main.tunnel1_address
+}
+
+output "vpn_tunnel1_preshared_key" {
+  description = "VPN Tunnel 1 Preshared Key"
+  value       = aws_vpn_connection.main.tunnel1_preshared_key
+  sensitive   = true
+}

@@ -92,3 +92,26 @@ variable "db_private_rt_tags" {
   default     = {}
 }
 
+# =============================================================================
+# [New] Azure VPN & DNS Integration Variables
+# =============================================================================
+
+variable "azure_bgp_asn" {
+  description = "Azure VPN Gateway의 BGP ASN (일반적으로 65515)"
+  type        = string
+}
+
+variable "azure_public_ip" {
+  description = "Azure VPN Gateway의 Public IP 주소"
+  type        = string
+}
+
+variable "azure_cidr" {
+  description = "Azure VNet의 CIDR 블록 (라우팅 대상)"
+  type        = string
+}
+
+variable "azure_dns_ip" {
+  description = "Azure Private DNS Resolver의 Inbound IP 주소"
+  type        = string
+}

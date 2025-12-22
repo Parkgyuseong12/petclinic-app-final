@@ -67,6 +67,30 @@ variable "db_private_subnet_cidrs" {
   default     = ["10.0.1.0/25", "10.0.11.0/25"]
 }
 
+variable "azure_bgp_asn" {
+  description = "Azure VPN Gateway의 BGP ASN (정적 라우팅 기본값: 65000, 동적: 65515)"
+  type        = string
+  default     = "65000"
+}
+
+variable "azure_public_ip" {
+  description = "Azure VPN Gateway의 Public IP"
+  type        = string
+  default     = "4.218.15.218"
+}
+
+variable "azure_cidr" {
+  description = "Azure VNet의 CIDR (라우팅 대상)"
+  type        = string
+  default     = "192.168.0.0/16"
+}
+
+variable "azure_dns_ip" {
+  description = "Azure Private DNS Resolver IP (Inbound)"
+  type        = string
+  default     = "192.168.200.4"
+}
+
 # -----------------------------------------------------------------------------
 # EKS Cluster Name (for tagging)
 # -----------------------------------------------------------------------------

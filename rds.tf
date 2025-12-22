@@ -56,9 +56,33 @@ resource "aws_db_parameter_group" "main" {
     value = "2"
   }
 
+  # 1. Binlog 형식을 ROW로 설정
+  parameter {
+    name         = "binlog_format"
+    value        = "ROW"
+    apply_method = "pending-reboot" # 재부팅 적용
+  }
+
+  # 2. GTID 모드 활성화 (추가됨)
+  parameter {
+    name         = "gtid-mode"
+    value        = "ON"
+    apply_method = "pending-reboot" # 재부팅 적용
+  }
+
+  # 3. GTID 일관성 강제 (필수 추가!)
+  # gtid_mode = ON을 위해서는 이 값이 반드시 ON이어야 합니다.
+  parameter {
+    name         = "enforce_gtid_consistency"
+    value        = "ON"
+    apply_method = "pending-reboot" # 재부팅 적용
+  }
+
   tags = {
     Name = "${var.project_name}-db-params"
   }
+
+
 }
 
 # -----------------------------------------------------------------------------
