@@ -2,10 +2,14 @@ FROM maven:3.8-eclipse-temurin-17 AS builder
 
 WORKDIR /app
 
+# 루트 pom.xml 복사
 COPY pom.xml .
-COPY src ./src
 
-RUN mvn clean package -DskipTests
+# 현재 서비스 복사
+COPY spring-petclinic-customers-service ./spring-petclinic-customers-service
+
+# 빌드
+RUN mvn clean package -f spring-petclinic-customers-service/pom.xml -DskipTests
 
 FROM eclipse-temurin:17-jre
 
@@ -13,7 +17,7 @@ WORKDIR /app
 
 RUN groupadd -f -g 1000 spring && useradd -u 1000 -g spring spring 2>/dev/null || true
 
-COPY --from=builder /app/target/*.jar app.jar
+COPY --from=builder /app/spring-petclinic-customers-service/target/*.jar app.jar
 
 RUN chown -R spring:spring /app
 
