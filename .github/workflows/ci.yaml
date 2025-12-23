@@ -1,18 +1,38 @@
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: petclinic-msa
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: 'https://github.com/Parkgyuseong12/petclinic-gitops-final.git' # GitOps 레포
-    targetRevision: HEAD
-    path: '.' # YAML 파일들이 있는 루트 경로
-  destination:
-    server: 'https://kubernetes.default.svc'
-    namespace: default
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true # 클러스터 상태를 Git과 동일하게 강제 유지
+name: PetClinic CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-gateway, customers, vets, visits, frontend]
+
+    steps:
+      - name: Checkout App Repo
+        uses: actions/checkout@v4
+
+      # [수정된 부분] Access Key를 사용하여 AWS에 로그인합니다.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          SERVICE_NAME: petclinic-${{ matrix.service }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # 각 서비스 폴더 경로에 맞춰 빌드 진행
+          docker build -t $ECR_REGISTRY/$SERVICE_NAME:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$SERVICE_NAME:$IMAGE_TAG
