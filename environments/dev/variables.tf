@@ -163,56 +163,48 @@ variable "db_name" {
 variable "db_username" {
   description = "RDS 마스터 사용자 이름"
   type        = string
-  default     = "admin"
   sensitive   = true
 }
 
 variable "db_password" {
   description = "RDS 마스터 비밀번호"
   type        = string
-  default     = "petclinic1234" # 프로덕션에서는 terraform.tfvars로 관리하세요!
   sensitive   = true
 }
 
 variable "db_username_vets" {
   description = "RDS vets 사용자 이름"
   type        = string
-  default     = "vets_user"
   sensitive   = true
 }
 
 variable "db_password_vets" {
   description = "RDS vets 비밀번호"
   type        = string
-  default     = "vets1234" # 프로덕션에서는 terraform.tfvars로 관리하세요!
   sensitive   = true
 }
 
 variable "db_username_visits" {
   description = "RDS visits 사용자 이름"
   type        = string
-  default     = "visits_user"
   sensitive   = true
 }
 
 variable "db_password_visits" {
   description = "RDS visits 비밀번호"
   type        = string
-  default     = "visits1234" # 프로덕션에서는 terraform.tfvars로 관리하세요!
   sensitive   = true
 }
 
 variable "db_username_customers" {
   description = "RDS customers 사용자 이름"
   type        = string
-  default     = "customers_user"
   sensitive   = true
 }
 
 variable "db_password_customers" {
   description = "RDS customers 비밀번호"
   type        = string
-  default     = "customers1234" # 프로덕션에서는 terraform.tfvars로 관리하세요!
   sensitive   = true
 }
 
