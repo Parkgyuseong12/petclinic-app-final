@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      default-filters:
+        - name: CircuitBreaker
+          args:
+            name: defaultCircuitBreaker
+            fallbackUri: forward:/fallback
+        - name: Retry
+          args:
+            retries: 1
+            statuses: SERVICE_UNAVAILABLE
+            methods: POST
+      routes:
+        - id: vets-service
+          uri: http://petclinic-vets:8080
+          predicates:
+            - Path=/api/vet/**
+          filters:
+            - StripPrefix=2
+        - id: visits-service
+          uri: http://petclinic-visits:8080
+          predicates:
+            - Path=/api/visit/**
+          filters:
+            - StripPrefix=2
+        - id: customers-service
+          uri: http://petclinic-customers:8080
+          predicates:
+            - Path=/api/customer/**
+          filters:
+            - StripPrefix=2
+        - id: genai-service
+          uri: http://petclinic-genai:8080
+          predicates:
+            - Path=/api/genai/**
+          filters:
+            - StripPrefix=2
+            - CircuitBreaker=name=genaiCircuitBreaker,fallbackUri=/fallback
+
+server:
+  port: 8080
+
+management:
+  tracing:
+    enabled: false 
+  zipkin:
+    tracing:
+      endpoint: ""
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}

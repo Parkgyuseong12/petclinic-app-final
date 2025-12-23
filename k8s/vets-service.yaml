@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: petclinic-vets
+  labels:
+    app: petclinic-vets
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: petclinic-vets
+  template:
+    metadata:
+      labels:
+        app: petclinic-vets
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: vets-service
+          image: <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/petclinic-vets:v5.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: mysql
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: petclinic-config
+                  key: DB_HOST
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:mysql://$(DB_HOST):3306/vets_db
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: petclinic-db-secret
+                  key: VETS_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: petclinic-db-secret
+                  key: VETS_DATASOURCE_PASSWORD
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "400m"
+            limits:
+              memory: "1Gi"
+              cpu: "800m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: petclinic-vets
+  labels:
+    app: petclinic-vets
+spec:
+  type: ClusterIP
+  selector:
+    app: petclinic-vets
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+

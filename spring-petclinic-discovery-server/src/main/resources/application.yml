@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: discovery-server
+
+server:
+  port: 8761
+
+# NOTE: Discovery Server (Eureka) is NOT NEEDED in Kubernetes
+# K8s provides built-in service discovery via DNS
+
+logging:
+  level:
+    org:
+      springframework:
+        boot: INFO
+        web: INFO
+

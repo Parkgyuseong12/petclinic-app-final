@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: vets-service
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/vets_db
+    username: ${DB_USER:root}
+    password: ${DB_PASS:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cache:
+    cache-names: vets
+  profiles:
+    active: production
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}

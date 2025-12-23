@@ -1,249 +1,289 @@
-# PetClinic 프로덕션 인프라 (Terraform)
+# Distributed version of the Spring PetClinic Sample Application built with Spring Cloud and Spring AI
 
-Spring PetClinic MSA 애플리케이션을 위한 AWS 프로덕션 인프라 구축 코드입니다.
+[![Build Status](https://github.com/spring-petclinic/spring-petclinic-microservices/actions/workflows/maven-build.yml/badge.svg)](https://github.com/spring-petclinic/spring-petclinic-microservices/actions/workflows/maven-build.yml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## 📋 목차
+This microservices branch was initially derived from [AngularJS version](https://github.com/spring-petclinic/spring-petclinic-angular1) to demonstrate how to split sample Spring application into [microservices](http://www.martinfowler.com/articles/microservices.html).
+To achieve that goal, we use Spring Cloud Gateway, Spring Cloud Circuit Breaker, Spring Cloud Config, Micrometer Tracing, Resilience4j, Open Telemetry 
+and the Eureka Service Discovery from the [Spring Cloud Netflix](https://github.com/spring-cloud/spring-cloud-netflix) technology stack.
 
-- [요구사항](#요구사항)
-- [아키텍처](#아키텍처)
-- [설치 및 사용](#설치-및-사용)
-- [S3 Backend 설정](#s3-backend-설정)
-- [주요 구성 요소](#주요-구성-요소)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/spring-petclinic/spring-petclinic-microservices)
 
-## 🔧 요구사항
+[![Open in Codeanywhere](https://codeanywhere.com/img/open-in-codeanywhere-btn.svg)](https://app.codeanywhere.com/#https://github.com/spring-petclinic/spring-petclinic-microservices)
 
-- **Terraform**: >= 1.10.0 (S3 Object Lock 지원)
-- **AWS CLI**: 최신 버전
-- **AWS 계정**: 적절한 권한 (IAM, VPC, EC2, RDS, S3 등)
+## Starting services locally without Docker
 
-## 🏗️ 아키텍처
+Every microservice is a Spring Boot application and can be started locally using IDE or `../mvnw spring-boot:run` command.
+Please note that supporting services (Config and Discovery Server) must be started before any other application (Customers, Vets, Visits and API).
+Startup of Tracing server, Admin server, Grafana and Prometheus is optional.
+If everything goes well, you can access the following services at given location:
+* Discovery Server - http://localhost:8761
+* Config Server - http://localhost:8888
+* AngularJS frontend (API Gateway) - http://localhost:8080
+* Customers, Vets, Visits and GenAI Services - random port, check Eureka Dashboard 
+* Tracing Server (Zipkin) - http://localhost:9411/zipkin/ (we use [openzipkin](https://github.com/openzipkin/zipkin/tree/main/zipkin-server))
+* Admin Server (Spring Boot Admin) - http://localhost:9090
+* Grafana Dashboards - http://localhost:3030
+* Prometheus - http://localhost:9091
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Internet                              │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-            ┌───────────▼───────────┐
-            │   Internet Gateway   │
-            └───────────┬───────────┘
-                        │
-        ┌───────────────┴───────────────┐
-        │      VPC (10.0.0.0/16)        │
-        │                               │
-        │  ┌─────────────────────────┐ │
-        │  │  Public Subnet A         │ │
-        │  │  (10.0.1.0/24)          │ │
-        │  │  - Bastion Host         │ │
-        │  │  - NAT Gateway A        │ │
-        │  └─────────────────────────┘ │
-        │                               │
-        │  ┌─────────────────────────┐ │
-        │  │  Private Subnet A       │ │
-        │  │  (10.0.11.0/24)         │ │
-        │  │  - Management Server    │ │
-        │  │  - EKS Nodes (예정)     │ │
-        │  └─────────────────────────┘ │
-        │                               │
-        │  ┌─────────────────────────┐ │
-        │  │  Private Subnet C       │ │
-        │  │  (10.0.12.0/24)         │ │
-        │  │  - RDS MySQL           │ │
-        │  │  - EKS Nodes (예정)     │ │
-        │  └─────────────────────────┘ │
-        └───────────────────────────────┘
-```
+You can tell Config Server to use your local Git repository by using `native` Spring profile and setting
+`GIT_REPO` environment variable, for example:
+`-Dspring.profiles.active=native -DGIT_REPO=/projects/spring-petclinic-microservices-config`
 
-### 주요 특징
+## Starting services locally with docker-compose
+In order to start entire infrastructure using Docker, you have to build images by executing
+``bash
+./mvnw clean install -P buildDocker
+``
+This requires `Docker` or `Docker desktop` to be installed and running.
 
-- **고가용성**: 2개 AZ 사용, NAT Gateway HA 구성
-- **보안**: Private Subnet 배치, Security Group 최소 권한
-- **확장성**: EKS 클러스터 준비 (eksctl로 생성 예정)
-
-## 🚀 설치 및 사용
-
-### 1. 저장소 클론 및 초기화
-
+Alternatively you can also build all the images on `Podman`, which requires Podman or Podman Desktop to be installed and running.
 ```bash
-cd petclinic-test-infra
-terraform init
+./mvnw clean install -PbuildDocker -Dcontainer.executable=podman
 ```
-
-### 2. 변수 설정
-
-`terraform.tfvars` 파일 생성 (선택적):
-
-```hcl
-project_name = "petclinic"
-environment  = "prod"
-aws_region   = "ap-northeast-2"
-
-# S3 Backend 설정
-tfstate_bucket_name = "petclinic-terraform-state-prod-ap-northeast-2"
-tfstate_key_prefix  = "terraform.tfstate"
-enable_s3_object_lock = true
-s3_object_lock_mode   = "GOVERNANCE"
-s3_object_lock_days   = 7
-
-# 보안 설정
-allowed_ssh_cidr = "YOUR_IP/32"  # 본인 IP로 변경
-
-# RDS 설정
-db_username = "petclinic_admin"
-db_password = "SecurePassword123!"  # 강력한 비밀번호 사용
-```
-
-### 3. S3 Backend 설정
-
-#### 방법 1: backend.tf 파일 생성
-
+By default, the Docker OCI image is build for an `linux/amd64` platform.
+For other architectures, you could change it by using the `-Dcontainer.platform` maven command line argument.
+For instance, if you target container images for an Apple M2, you could use the command line with the `linux/arm64` architecture:
 ```bash
-cp backend.tf.example backend.tf
-# backend.tf 파일을 편집하여 버킷 이름 등 설정
+./mvnw clean install -P buildDocker -Dcontainer.platform="linux/arm64"
 ```
 
-#### 방법 2: terraform init 시 설정
+Once images are ready, you can start them with a single command
+`docker compose up` or `podman-compose up`. 
 
+Containers startup order is coordinated with the `service_healthy` condition of the Docker Compose [depends-on](https://github.com/compose-spec/compose-spec/blob/main/spec.md#depends_on) expression 
+and the [healthcheck](https://github.com/compose-spec/compose-spec/blob/main/spec.md#healthcheck) of the service containers. 
+After starting services, it takes a while for API Gateway to be in sync with service registry,
+so don't be scared of initial Spring Cloud Gateway timeouts. You can track services availability using Eureka dashboard
+available by default at http://localhost:8761.
+
+The `main` branch uses an Eclipse Temurin with Java 17 as Docker base image.
+
+*NOTE: Under MacOSX or Windows, make sure that the Docker VM has enough memory to run the microservices. The default settings
+are usually not enough and make the `docker-compose up` painfully slow.*
+
+
+## Starting services locally with docker-compose and Java
+If you experience issues with running the system via docker-compose you can try running the `./scripts/run_all.sh` script that will start the infrastructure services via docker-compose and all the Java based applications via standard `nohup java -jar ...` command. The logs will be available under `${ROOT}/target/nameoftheapp.log`. 
+
+Each of the java based applications is started with the `chaos-monkey` profile in order to interact with Spring Boot Chaos Monkey. You can check out the (README)[scripts/chaos/README.md] for more information about how to use the `./scripts/chaos/call_chaos.sh` helper script to enable assaults.
+
+## Understanding the Spring Petclinic application
+
+[See the presentation of the Spring Petclinic Framework version](http://fr.slideshare.net/AntoineRey/spring-framework-petclinic-sample-application)
+
+[A blog post introducing the Spring Petclinic Microsevices](http://javaetmoi.com/2018/10/architecture-microservices-avec-spring-cloud/) (french language)
+
+You can then access petclinic here: http://localhost:8080/
+
+## Microservices Overview
+
+This project consists of several microservices:
+- **Customers Service**: Manages customer data.
+- **Vets Service**: Handles information about veterinarians.
+- **Visits Service**: Manages pet visit records.
+- **GenAI Service**: Provides a chatbot interface to the application.
+- **API Gateway**: Routes client requests to the appropriate services.
+- **Config Server**: Centralized configuration management for all services.
+- **Discovery Server**: Eureka-based service registry.
+
+Each service has its own specific role and communicates via REST APIs.
+
+
+![Spring Petclinic Microservices screenshot](docs/application-screenshot.png)
+
+
+**Architecture diagram of the Spring Petclinic Microservices**
+
+![Spring Petclinic Microservices architecture](docs/microservices-architecture-diagram.jpg)
+
+## Integrating the Spring AI Chatbot
+
+Spring Petclinic integrates a Chatbot that allows you to interact with the application in a natural language. Here are some examples of what you could ask:
+
+1. Please list the owners that come to the clinic.
+2. Are there any vets that specialize in surgery?
+3. Is there an owner named Betty?
+4. Which owners have dogs?
+5. Add a dog for Betty. Its name is Moopsie.
+6. Create a new owner.
+
+![Screenshot of the chat dialog](docs/spring-ai.png)
+
+This `spring-petlinic-genai-service` microservice currently supports **OpenAI** (default) or **Azure's OpenAI** as the LLM provider.
+In order to start the microservice, perform the following steps:
+
+1. Decide which provider you want to use. By default, the `spring-ai-openai-spring-boot-starter` dependency is enabled. 
+   You can change it to `spring-ai-azure-openai-spring-boot-starter`in the `pom.xml`.
+2. Create an OpenAI API key or a Azure OpenAI resource in your Azure Portal.
+   Refer to the [OpenAI's quickstart](https://platform.openai.com/docs/quickstart) or [Azure's documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for further information on how to obtain these.
+   You only need to populate the provider you're using - either openai, or azure-openai.
+   If you don't have your own OpenAI API key, don't worry!
+   You can temporarily use the `demo` key, which OpenAI provides free of charge for demonstration purposes.
+   This `demo` key has a quota, is limited to the `gpt-4o-mini` model, and is intended solely for demonstration use.
+   With your own OpenAI account, you can test the `gpt-4o` model by modifying the `deployment-name` property of the `application.yml` file.
+3. Export your API keys and endpoint as environment variables:
+    * either OpenAI:
+    ```bash
+    export OPENAI_API_KEY="your_api_key_here"
+    ```
+    * or Azure OpenAI:
+    ```bash
+    export AZURE_OPENAI_ENDPOINT="https://your_resource.openai.azure.com"
+    export AZURE_OPENAI_KEY="your_api_key_here"
+    ```
+
+## In case you find a bug/suggested improvement for Spring Petclinic Microservices
+
+Our issue tracker is available here: https://github.com/spring-petclinic/spring-petclinic-microservices/issues
+
+## Database configuration
+
+In its default configuration, Petclinic uses an in-memory database (HSQLDB) which gets populated at startup with data.
+A similar setup is provided for MySql in case a persistent database configuration is needed.
+Dependency for Connector/J, the MySQL JDBC driver is already included in the `pom.xml` files.
+
+### Start a MySql database
+
+You may start a MySql database with docker:
+
+```
+docker run -e MYSQL_ROOT_PASSWORD=petclinic -e MYSQL_DATABASE=petclinic -p 3306:3306 mysql:8.4.5
+```
+or download and install the MySQL database (e.g., MySQL Community Server 8.4.5 LTS), which can be found here: https://dev.mysql.com/downloads/
+
+### Use the Spring 'mysql' profile
+
+To use a MySQL database, you have to start 3 microservices (`visits-service`, `customers-service` and `vets-services`)
+with the `mysql` Spring profile. Add the `--spring.profiles.active=mysql` as program argument.
+
+By default, at startup, database schema will be created and data will be populated.
+You may also manually create the PetClinic database and data by executing the `"db/mysql/{schema,data}.sql"` scripts of each 3 microservices. 
+In the `application.yml` of the [Configuration repository], set the `initialization-mode` to `never`.
+
+If you are running the microservices with Docker, you have to add the `mysql` profile into the (Dockerfile)[docker/Dockerfile]:
+```
+ENV SPRING_PROFILES_ACTIVE docker,mysql
+```
+In the `mysql section` of the `application.yml` from the [Configuration repository], you have to change 
+the host and port of your MySQL JDBC connection string. 
+
+## Custom metrics monitoring
+
+Grafana and Prometheus are included in the `docker-compose.yml` configuration, and the public facing applications
+have been instrumented with [MicroMeter](https://micrometer.io) to collect JVM and custom business metrics.
+
+A JMeter load testing script is available to stress the application and generate metrics: [petclinic_test_plan.jmx](spring-petclinic-api-gateway/src/test/jmeter/petclinic_test_plan.jmx)
+
+![Grafana metrics dashboard](docs/grafana-custom-metrics-dashboard.png)
+
+### Using Prometheus
+
+* Prometheus can be accessed from your local machine at http://localhost:9091
+
+### Using Grafana with Prometheus
+
+* An anonymous access and a Prometheus datasource are setup.
+* A `Spring Petclinic Metrics` Dashboard is available at the URL http://localhost:3030/d/69JXeR0iw/spring-petclinic-metrics.
+You will find the JSON configuration file here: [docker/grafana/dashboards/grafana-petclinic-dashboard.json]().
+* You may create your own dashboard or import the [Micrometer/SpringBoot dashboard](https://grafana.com/dashboards/4701) via the Import Dashboard menu item.
+The id for this dashboard is `4701`.
+
+### Custom metrics
+Spring Boot registers a lot number of core metrics: JVM, CPU, Tomcat, Logback... 
+The Spring Boot auto-configuration enables the instrumentation of requests handled by Spring MVC.
+All those three REST controllers `OwnerResource`, `PetResource` and `VisitResource` have been instrumented by the `@Timed` Micrometer annotation at class level.
+
+* `customers-service` application has the following custom metrics enabled:
+  * @Timed: `petclinic.owner`
+  * @Timed: `petclinic.pet`
+* `visits-service` application has the following custom metrics enabled:
+  * @Timed: `petclinic.visit`
+
+## Looking for something in particular?
+
+| Spring Cloud components         | Resources  |
+|---------------------------------|------------|
+| Configuration server            | [Config server properties](spring-petclinic-config-server/src/main/resources/application.yml) and [Configuration repository] |
+| Service Discovery               | [Eureka server](spring-petclinic-discovery-server) and [Service discovery client](spring-petclinic-vets-service/src/main/java/org/springframework/samples/petclinic/vets/VetsServiceApplication.java) |
+| API Gateway                     | [Spring Cloud Gateway starter](spring-petclinic-api-gateway/pom.xml) and [Routing configuration](/spring-petclinic-api-gateway/src/main/resources/application.yml) |
+| Docker Compose                  | [Spring Boot with Docker guide](https://spring.io/guides/gs/spring-boot-docker/) and [docker-compose file](docker-compose.yml) |
+| Circuit Breaker                 | [Resilience4j fallback method](spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/boundary/web/ApiGatewayController.java)  |
+| Grafana / Prometheus Monitoring | [Micrometer implementation](https://micrometer.io/), [Spring Boot Actuator Production Ready Metrics] |
+
+|  Front-end module | Files |
+|-------------------|-------|
+| Node and NPM      | [The frontend-maven-plugin plugin downloads/installs Node and NPM locally then runs Bower and Gulp](spring-petclinic-ui/pom.xml)  |
+| Bower             | [JavaScript libraries are defined by the manifest file bower.json](spring-petclinic-ui/bower.json)  |
+| Gulp              | [Tasks automated by Gulp: minify CSS and JS, generate CSS from LESS, copy other static resources](spring-petclinic-ui/gulpfile.js)  |
+| Angular JS        | [app.js, controllers and templates](spring-petclinic-ui/src/scripts/)  |
+
+## Pushing to a Docker registry
+
+Docker images for `linux/amd64` and `linux/arm64` platforms have been published into DockerHub 
+in the [springcommunity](https://hub.docker.com/u/springcommunity) organization.
+You can pull an image:
 ```bash
-terraform init \
-  -backend-config="bucket=petclinic-terraform-state-prod-ap-northeast-2" \
-  -backend-config="key=terraform.tfstate" \
-  -backend-config="region=ap-northeast-2" \
-  -backend-config="encrypt=true" \
-  -backend-config="use_lockfile=true"
+docker pull springcommunity/spring-petclinic-config-server
 ```
+You may prefer to build then push images to your own Docker registry.
 
-### 4. 인프라 배포
+### Choose your Docker registry
 
+You need to define your target Docker registry.
+Make sure you're already logged in by running `docker login <endpoint>` or `docker login` if you're just targeting Docker hub.
+
+Setup the `REPOSITORY_PREFIX` env variable to target your Docker registry.
+If you're targeting Docker hub, simple provide your username, for example:
 ```bash
-# 계획 확인
-terraform plan
-
-# 배포 실행
-terraform apply
+export REPOSITORY_PREFIX=springcommunity
 ```
 
-### 5. 출력 정보 확인
-
+For other Docker registries, provide the full URL to your repository, for example:
 ```bash
-terraform output
+export REPOSITORY_PREFIX=harbor.myregistry.com/petclinic
 ```
 
-## 📦 S3 Backend 설정
-
-### use_lockfile 옵션
-
-Terraform 1.10.0 이상에서는 `use_lockfile = true` 옵션을 사용하여 S3의 파일 기반 락킹을 활성화할 수 있습니다. 이 옵션을 활성화하면:
-
-- **DynamoDB 불필요**: DynamoDB 테이블 없이도 락킹 기능 사용 가능
-- **파일 기반 락킹**: S3에 `.tflock` 파일을 생성하여 state 파일에 대한 동시 접근 제어
-- **Object Lock과 함께 사용**: Object Lock이 활성화된 버킷과 함께 사용하면 더욱 안전한 락킹 제공
-
-⚠️ **중요**: `use_lockfile = true` 옵션은 `backend.tf` 파일에 명시적으로 설정해야 합니다.
-
-### S3 Object Lock이란?
-
-S3 Object Lock은 객체를 보호하고 실수로 삭제되거나 덮어쓰는 것을 방지합니다. Terraform state 파일의 무결성을 보장합니다.
-
-### 설정 옵션
-
-| 옵션 | 설명 | 기본값 |
-|------|------|--------|
-| `enable_s3_object_lock` | Object Lock 활성화 | `true` |
-| `s3_object_lock_mode` | Lock 모드 (`GOVERNANCE` 또는 `COMPLIANCE`) | `GOVERNANCE` |
-| `s3_object_lock_days` | 최소 보관 기간 (일) | `7` |
-
-### Lock 모드 비교
-
-- **GOVERNANCE**: 권한이 있는 사용자가 `s3:BypassGovernanceRetention` 권한으로 삭제 가능
-- **COMPLIANCE**: 보관 기간 동안 누구도 삭제 불가 (더 엄격)
-
-### 주의사항
-
-⚠️ **중요**: S3 Object Lock은 버킷 생성 시에만 활성화할 수 있습니다. 생성 후에는 비활성화할 수 없습니다.
-
-### State 마이그레이션
-
-기존 로컬 state를 S3로 마이그레이션:
-
+To push Docker image for the `linux/amd64` and the `linux/arm64` platform to your own registry, please use the command line:
 ```bash
-# 1. backend.tf 파일 생성
-cp backend.tf.example backend.tf
-
-# 2. 마이그레이션 실행
-terraform init -migrate-state
+mvn clean install -Dmaven.test.skip -P buildDocker -Ddocker.image.prefix=${REPOSITORY_PREFIX} -Dcontainer.build.extraarg="--push" -Dcontainer.platform="linux/amd64,linux/arm64"
 ```
 
-## 🏛️ 주요 구성 요소
+The `scripts/pushImages.sh` and `scripts/tagImages.sh` shell scripts could also be used once you build your image with the `buildDocker` maven profile.
+The `scripts/tagImages.sh` requires to declare the `VERSION` env variable.
 
-### 네트워크
+## Compiling the CSS
 
-- **VPC**: `10.0.0.0/16`
-- **Public Subnets**: 2개 (각 AZ별)
-- **Private Subnets**: 2개 (각 AZ별)
-- **NAT Gateway**: 2개 (HA, Zonal Isolation)
-
-### 컴퓨팅
-
-- **Bastion Host**: Public Subnet, SSH 접근
-- **Management Server**: Private Subnet, eksctl/kubectl 실행용
-
-### 데이터베이스
-
-- **RDS MySQL 8.0**: Multi-AZ (현재 false, 추후 true)
-- **데이터베이스**: `customers_db`, `vets_db`, `visits_db`
-
-### 보안
-
-- **Security Groups**: 최소 권한 원칙
-- **IAM Roles**: Management Server용 AdminAccess
-- **암호화**: RDS, S3, EBS 암호화 활성화
-
-## 📝 사용 예시
-
-### SSH 접속
-
+There is a `petclinic.css` in `spring-petclinic-api-gateway/src/main/resources/static/css`.
+It was generated from the `petclinic.scss` source, combined with the [Bootstrap](https://getbootstrap.com/) library.
+If you make changes to the `scss`, or upgrade Bootstrap, you will need to re-compile the CSS resources
+using the Maven profile `css` of the `spring-petclinic-api-gateway`module.
 ```bash
-# Bastion 접속
-ssh -i petclinic-keypair.pem ubuntu@<BASTION_IP>
-
-# Management Server 접속 (ProxyJump)
-ssh -i petclinic-keypair.pem -J ubuntu@<BASTION_IP> ubuntu@<MGMT_IP>
+cd spring-petclinic-api-gateway
+mvn generate-resources -P css
 ```
 
-### DB 초기화
+## Interesting Spring Petclinic forks
 
-Management Server에서:
+The Spring Petclinic `main` branch in the main [spring-projects](https://github.com/spring-projects/spring-petclinic)
+GitHub org is the "canonical" implementation, currently based on Spring Boot and Thymeleaf.
 
-```bash
-# RDS 연결 스크립트 사용
-./db-connect.sh
+This [spring-petclinic-microservices](https://github.com/spring-petclinic/spring-petclinic-microservices/) project is one of the [several forks](https://spring-petclinic.github.io/docs/forks.html) 
+hosted in a special GitHub org: [spring-petclinic](https://github.com/spring-petclinic).
+If you have a special interest in a different technology stack
+that could be used to implement the Pet Clinic then please join the community there.
 
-# 또는 직접 연결
-mysql -h <RDS_ENDPOINT> -u <USERNAME> -p < /home/ubuntu/init.sql
-```
 
-### EKS 클러스터 생성
+## Contributing
 
-Management Server에서:
+The [issue tracker](https://github.com/spring-petclinic/spring-petclinic-microservices/issues) is the preferred channel for bug reports, features requests and submitting pull requests.
 
-```bash
-./create-eks-cluster.sh
-```
+For pull requests, editor preferences are available in the [editor config](.editorconfig) for easy use in common text editors. Read more and download plugins at <http://editorconfig.org>.
 
-## 🔒 보안 권장사항
 
-1. **SSH 접근 제한**: `allowed_ssh_cidr`를 본인 IP로 설정
-2. **RDS 비밀번호**: 강력한 비밀번호 사용, terraform.tfvars로 관리
-3. **S3 버킷 정책**: 필요시 특정 IAM 역할/사용자로 제한
-4. **State 파일**: 민감한 정보 포함 가능, 접근 제어 필수
+[Configuration repository]: https://github.com/spring-petclinic/spring-petclinic-microservices-config
+[Spring Boot Actuator Production Ready Metrics]: https://docs.spring.io/spring-boot/docs/current/reference/html/production-ready-metrics.html
 
-## 📚 참고 자료
+## Supported by
 
-- [Terraform S3 Backend](https://developer.hashicorp.com/terraform/language/settings/backends/s3)
-- [S3 Object Lock](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html)
-- [Terraform State Management](https://developer.hashicorp.com/terraform/language/state)
-
-## 📄 라이선스
-
-이 프로젝트는 내부 사용을 위한 것입니다.
-
+[![JetBrains logo](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSourceSupport)

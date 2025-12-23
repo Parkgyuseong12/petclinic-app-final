@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: customers-service
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/customers_db
+    username: ${DB_USER:root}
+    password: ${DB_PASS:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  rabbitmq:
+    host: rabbitmq.default.svc.cluster.local
+    port: 5672
+    username: guest
+    password: guest
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}

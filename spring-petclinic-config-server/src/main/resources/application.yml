@@ -1,0 +1,20 @@
+server.port: 8888
+
+spring:
+  application:
+    name: config-server
+
+# NOTE: Config Server is NOT NEEDED in Kubernetes
+# K8s ConfigMaps and Secrets provide configuration management
+# This service is deprecated and will be removed in production K8s deployments
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+

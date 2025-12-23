@@ -1,0 +1,33 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: petclinic-monitor
+  namespace: monitoring  # 프로메테우스가 설치된 네임스페이스
+  labels:
+    # [핵심] 헬름으로 설치한 프로메테우스의 release 이름과 같아야 함.
+    # 만약 'helm install my-monitoring'으로 설치했다면 아래와 같음.
+    release: my-monitoring 
+spec:
+  # 1. 타겟 서비스 선택 (Label Selector)
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: 
+          - petclinic-api-gateway
+          - petclinic-customers
+          - petclinic-vets
+          - petclinic-visits
+          # frontend는 nginx라 actuator가 없으므로 제외 (필요시 별도 설정)
+
+  # 2. 타겟 네임스페이스
+  namespaceSelector:
+    matchNames:
+      - default
+
+  # 3. 스크랩 규칙
+  endpoints:
+    - port: http  # [중요] Step 1에서 Service에 추가한 'name: http'와 일치해야 함
+      path: /actuator/prometheus
+      interval: 15s
+      scrapeTimeout: 10s

@@ -1,0 +1,347 @@
+version: "3.8"
+
+services:
+  # ===================================
+  # MySQL Database Service
+  # ===================================
+  mysql:
+    image: mysql:8.0
+    container_name: petclinic-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: petclinic
+      MYSQL_DATABASE: petclinic
+      MYSQL_USER: petclinic
+      MYSQL_PASSWORD: petclinic
+      # MySQL 8.0 기본 인증 플러그인 설정
+      MYSQL_DEFAULT_AUTHENTICATION_PLUGIN: mysql_native_password
+    ports:
+      - "3306:3306"
+    volumes:
+      # 데이터 지속성
+      - mysql-data:/var/lib/mysql
+      # 초기화 스크립트 (선택사항)
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - petclinic-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "petclinic",
+          "-ppetclinic",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ===================================
+  # Customers Service
+  # ===================================
+  customers-service:
+    build:
+      context: .
+      dockerfile: spring-petclinic-customers-service/Dockerfile
+    container_name: petclinic-customers-service
+    environment:
+      # Spring 프로필
+      SPRING_PROFILES_ACTIVE: mysql
+      # 데이터베이스 설정 (K8s DNS 이름 사용)
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: petclinic
+      DB_USER: petclinic
+      DB_PASS: petclinic
+      # 로깅
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - petclinic-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    # 내부 네트워크에서만 사용
+    expose:
+      - "8080"
+
+  # ===================================
+  # Vets Service
+  # ===================================
+  vets-service:
+    build:
+      context: .
+      dockerfile: spring-petclinic-vets-service/Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: petclinic-vets-service
+    environment:
+      # Spring 프로필
+      SPRING_PROFILES_ACTIVE: mysql
+      # 데이터베이스 설정
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: petclinic
+      DB_USER: petclinic
+      DB_PASS: petclinic
+      # 캐싱 설정
+      SPRING_CACHE_TYPE: caffeine
+      # 로깅
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - petclinic-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    expose:
+      - "8080"
+
+  # ===================================
+  # Visits Service
+  # ===================================
+  visits-service:
+    build:
+      context: .
+      dockerfile: spring-petclinic-visits-service/Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: petclinic-visits-service
+    environment:
+      # Spring 프로필
+      SPRING_PROFILES_ACTIVE: mysql
+      # 데이터베이스 설정
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: petclinic
+      DB_USER: petclinic
+      DB_PASS: petclinic
+      # 로깅
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - petclinic-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    expose:
+      - "8080"
+
+  # ===================================
+  # API Gateway
+  # ===================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: spring-petclinic-api-gateway/Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: petclinic-api-gateway
+    environment:
+      # Spring 프로필
+      SPRING_PROFILES_ACTIVE: mysql
+      # 데이터베이스 설정 (게이트웨이도 DB 접근 필요)
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: petclinic
+      DB_USER: petclinic
+      DB_PASS: petclinic
+      # 로깅
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD: DEBUG
+    ports:
+      # 호스트의 8080 포트를 컨테이너의 8080 포트에 매핑
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      customers-service:
+        condition: service_healthy
+      vets-service:
+        condition: service_healthy
+      visits-service:
+        condition: service_healthy
+    networks:
+      - petclinic-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # ===================================
+  # GenAI Service (선택사항)
+  # ===================================
+  genai-service:
+    build:
+      context: .
+      dockerfile: spring-petclinic-genai-service/Dockerfile
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    container_name: petclinic-genai-service
+    environment:
+      # Spring 프로필
+      SPRING_PROFILES_ACTIVE: mysql
+      # 데이터베이스 설정
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: petclinic
+      DB_USER: petclinic
+      DB_PASS: petclinic
+      # GenAI 설정 (선택사항 - 실제 API 키 필요)
+      AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-demo}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-https://demo.openai.azure.com/}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-demo}
+      # 로깅
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - petclinic-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    expose:
+      - "8080"
+
+  # ===================================
+  # Prometheus (모니터링)
+  # ===================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: petclinic-prometheus
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - "9090:9090"
+    networks:
+      - petclinic-network
+    depends_on:
+      - api-gateway
+      - customers-service
+      - vets-service
+      - visits-service
+    restart: unless-stopped
+
+  # ===================================
+  # Grafana (시각화)
+  # ===================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: petclinic-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    networks:
+      - petclinic-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+# ===================================
+# Networks
+# ===================================
+networks:
+  petclinic-network:
+    driver: bridge
+
+# ===================================
+# Volumes
+# ===================================
+volumes:
+  mysql-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

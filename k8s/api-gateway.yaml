@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: petclinic-api-gateway
+  labels:
+    app: petclinic-api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: petclinic-api-gateway
+  template:
+    metadata:
+      labels:
+        app: petclinic-api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: api-gateway
+          image: <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/petclinic-gateway:v5.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: mysql
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "400m"
+            limits:
+              memory: "1Gi"
+              cpu: "800m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: petclinic-api-gateway
+  labels:
+    app: petclinic-api-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: petclinic-api-gateway
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+
