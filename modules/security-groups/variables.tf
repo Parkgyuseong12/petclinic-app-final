@@ -55,4 +55,5 @@ variable "eks_cluster_sg_tags" {
 variable "azure_cidr" {
   description = "Azure VNet의 CIDR 블록 (라우팅 대상)"
   type        = string
+  default = "192.168.0.0/16"
 }
