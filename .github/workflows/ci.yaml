@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: petclinic-msa
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/Parkgyuseong12/petclinic-gitops-final.git' # GitOps 레포
+    targetRevision: HEAD
+    path: '.' # YAML 파일들이 있는 루트 경로
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true # 클러스터 상태를 Git과 동일하게 강제 유지
