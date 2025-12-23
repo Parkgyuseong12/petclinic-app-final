@@ -3,22 +3,22 @@ name: PetClinic CI Pipeline
 on:
   push:
     branches:
-      - main  # 여기에 '-'가 들어가는 형식을 사용하면 더 안전합니다.
+      - main
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     strategy:
-      # 한 번에 여러 서비스를 병렬로 빌드합니다.
+      # pom.xml의 <module> 이름과 동일하게 매칭합니다.
       matrix:
-        service: [api-gateway, customers, vets, visits, frontend]
+        service: [api-gateway, customers-service, vets-service, visits-service, admin-server]
 
     steps:
-      # 1. 소스 코드 가져오기
-      - name: Checkout App Repo
+      # 1. 리포지토리 코드 체크아웃
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # 2. AWS 자격 증명 설정 (Access Key 방식)
+      # 2. AWS 인증 설정 (Access Key 방식)
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -26,34 +26,37 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 3. Java 17 설정 (JAR 빌드를 위해 필수)
+      # 3. Java 17 설정 (JAR 빌드용)
       - name: Set up JDK 17
-        if: matrix.service != 'frontend' # 프론트엔드 제외
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: maven
+          cache: maven # 루트에 pom.xml이 있으므로 이제 캐시가 작동합니다.
 
-      # 4. Maven 빌드 (Dockerfile이 사용할 JAR 파일 생성)
+      # 4. Maven 빌드 (JAR 파일 생성)
+      # 부모 pom.xml이 루트에 있으므로 전체 프로젝트를 빌드하거나 특정 모듈만 지정합니다.
       - name: Build with Maven
-        if: matrix.service != 'frontend'
         run: |
-          cd petclinic-${{ matrix.service }}
-          mvn clean package -DskipTests
+          mvn clean package -pl spring-petclinic-${{ matrix.service }} -am -DskipTests
 
       # 5. ECR 로그인
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 6. Docker 이미지 빌드 및 ECR 푸시
+      # 6. Docker 이미지 빌드 및 푸시
       - name: Build and Push Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          SERVICE_NAME: spring-petclinic-${{ matrix.service }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          cd petclinic-${{ matrix.service }}
-          # Dockerfile이 있는 현재 폴더(.)에서 빌드
-          docker build -t $ECR_REGISTRY/petclinic-${{ matrix.service }}:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/petclinic-${{ matrix.service }}:$IMAGE_TAG
+          # 각 서비스 폴더 내부로 이동하여 빌드 수행
+          cd $SERVICE_NAME
+          docker build -t $ECR_REGISTRY/$SERVICE_NAME:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$SERVICE_NAME:$IMAGE_TAG
+          
+          # 추가로 latest 태그도 업데이트
+          docker tag $ECR_REGISTRY/$SERVICE_NAME:$IMAGE_TAG $ECR_REGISTRY/$SERVICE_NAME:latest
+          docker push $ECR_REGISTRY/$SERVICE_NAME:latest
