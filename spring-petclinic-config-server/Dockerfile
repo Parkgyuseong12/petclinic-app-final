@@ -4,12 +4,12 @@ FROM maven:3.8-eclipse-temurin-17 AS builder
 
 WORKDIR /app
 
-# Copy the root pom.xml and all source files
+# Copy pom files and source code from current directory
 COPY pom.xml .
-COPY spring-petclinic-config-server ./spring-petclinic-config-server
+COPY src ./src
 
 # Build the application
-RUN mvn clean package -f spring-petclinic-config-server/pom.xml -DskipTests
+RUN mvn clean package -DskipTests
 
 # Stage 2: Runtime Stage
 FROM eclipse-temurin:17-jre
@@ -20,7 +20,7 @@ WORKDIR /app
 RUN groupadd -f -g 1000 spring && useradd -u 1000 -g spring spring 2>/dev/null || true
 
 # Copy the built jar from builder stage
-COPY --from=builder /app/spring-petclinic-config-server/target/spring-petclinic-config-server-*.jar app.jar
+COPY --from=builder /app/target/spring-petclinic-config-server-*.jar app.jar
 
 # Change ownership to non-root user
 RUN chown -R spring:spring /app
