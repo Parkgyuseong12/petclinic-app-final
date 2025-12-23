@@ -1,20 +1,59 @@
-# 1. 자바 설치
+name: PetClinic CI Pipeline
+
+on:
+  push:
+    branches:
+      - main  # 여기에 '-'가 들어가는 형식을 사용하면 더 안전합니다.
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      # 한 번에 여러 서비스를 병렬로 빌드합니다.
+      matrix:
+        service: [api-gateway, customers, vets, visits, frontend]
+
+    steps:
+      # 1. 소스 코드 가져오기
+      - name: Checkout App Repo
+        uses: actions/checkout@v4
+
+      # 2. AWS 자격 증명 설정 (Access Key 방식)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 3. Java 17 설정 (JAR 빌드를 위해 필수)
       - name: Set up JDK 17
+        if: matrix.service != 'frontend' # 프론트엔드 제외
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: maven
 
-      # 2. Maven으로 JAR 파일 빌드 (이 과정이 있어야 Dockerfile이 작동함)
+      # 4. Maven 빌드 (Dockerfile이 사용할 JAR 파일 생성)
       - name: Build with Maven
+        if: matrix.service != 'frontend'
         run: |
           cd petclinic-${{ matrix.service }}
           mvn clean package -DskipTests
 
-      # 3. 도커 이미지 빌드 및 푸시
+      # 5. ECR 로그인
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 6. Docker 이미지 빌드 및 ECR 푸시
       - name: Build and Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           cd petclinic-${{ matrix.service }}
-          docker build -t ${{ steps.login-ecr.outputs.registry }}/petclinic-${{ matrix.service }}:${{ github.sha }} .
-          docker push ${{ steps.login-ecr.outputs.registry }}/petclinic-${{ matrix.service }}:${{ github.sha }}
+          # Dockerfile이 있는 현재 폴더(.)에서 빌드
+          docker build -t $ECR_REGISTRY/petclinic-${{ matrix.service }}:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/petclinic-${{ matrix.service }}:$IMAGE_TAG
