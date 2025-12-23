@@ -7,7 +7,6 @@ WORKDIR /app
 # Copy the root pom.xml and all source files
 COPY pom.xml .
 COPY spring-petclinic-config-server ./spring-petclinic-config-server
-COPY spring-petclinic-config-server/pom.xml ./spring-petclinic-config-server/
 
 # Build the application
 RUN mvn clean package -f spring-petclinic-config-server/pom.xml -DskipTests
