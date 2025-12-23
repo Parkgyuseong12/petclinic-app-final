@@ -2,26 +2,23 @@ FROM maven:3.8-eclipse-temurin-17 AS builder
 
 WORKDIR /app
 
-# 루트 pom.xml 복사
 COPY pom.xml .
-
-# 현재 서비스 복사
 COPY spring-petclinic-api-gateway ./spring-petclinic-api-gateway
 
-# 빌드
 RUN mvn clean package -f spring-petclinic-api-gateway/pom.xml -DskipTests
 
 FROM eclipse-temurin:17-jre
 
 WORKDIR /app
 
-RUN groupadd -f -g 1000 spring && useradd -u 1000 -g spring spring 2>/dev/null || true
+# jar 파일을 복사하면서 바로 권한 설정
+COPY --from=builder --chown=1000:1000 /app/spring-petclinic-api-gateway/target/*.jar app.jar
 
-COPY --from=builder /app/spring-petclinic-api-gateway/target/*.jar app.jar
+# 사용자 생성 (더 안전한 방법)
+RUN addgroup --gid 1000 spring || true && \
+    adduser --uid 1000 --gid 1000 --disabled-password --gecos "" spring || true
 
-RUN chown -R spring:spring /app
-
-USER spring
+USER 1000
 
 EXPOSE 8080
 
