@@ -47,5 +47,7 @@ jobs:
           docker build \
             -f spring-petclinic-${{ matrix.service }}/Dockerfile \
             -t $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:$IMAGE_TAG \
+            -t $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:latest \
             .
           docker push $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:latest
