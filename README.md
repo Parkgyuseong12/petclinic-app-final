@@ -287,3 +287,33 @@ For pull requests, editor preferences are available in the [editor config](.edit
 ## Supported by
 
 [![JetBrains logo](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSourceSupport)
+
+---
+
+## 🧪 CI/CD Pipeline Test
+
+### Test Details
+- **Date**: December 26, 2025
+- **Time**: $(date +%H:%M:%S)
+- **Tester**: Parkgyuseong12
+
+### Pipeline Flow
+```
+Code Change → GitHub Actions → Docker Build → ECR Push → ArgoCD Sync → EKS Deployment
+```
+
+### Services to Build
+- ✅ api-gateway
+- ✅ customers-service  
+- ✅ vets-service
+- ✅ visits-service
+- ✅ config-server
+- ✅ discovery-server
+- ✅ admin-server
+
+### Expected Result
+All 7 services should be built and pushed to ECR with:
+- Tag 1: `${GITHUB_SHA}`
+- Tag 2: `latest`
+
+---
