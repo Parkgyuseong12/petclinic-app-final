@@ -23,7 +23,6 @@ jobs:
         run: |
           SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
           echo "tag=${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "IMAGE_TAG=${SHORT_SHA}" >> $GITHUB_ENV
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -50,23 +49,20 @@ jobs:
       - name: Build and Push Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.set-tag.outputs.tag }}
         run: |
-          echo "🐳 Building: spring-petclinic-${{ matrix.service }}"
-          echo "📦 Tag: ${{ env.IMAGE_TAG }}"
-          
+          echo "🐳 Building spring-petclinic-${{ matrix.service }}"
           docker build \
             -f spring-petclinic-${{ matrix.service }}/Dockerfile \
-            -t $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:${{ env.IMAGE_TAG }} \
+            -t $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:$IMAGE_TAG \
             -t $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:latest \
             .
-          
-          docker push $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+          docker push $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:$IMAGE_TAG
           docker push $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:latest
-          
-          echo "✅ Pushed: $ECR_REGISTRY/spring-petclinic-${{ matrix.service }}:${{ env.IMAGE_TAG }}"
+          echo "✅ Pushed: $IMAGE_TAG"
 
-  # 🎯 핵심: Manifest 업데이트
-  update-gitops-repo:
+  # 🎯 PR 생성 (자동 배포 대신)
+  create-deployment-pr:
     needs: build-and-push
     runs-on: ubuntu-latest
     
@@ -78,72 +74,60 @@ jobs:
           token: ${{ secrets.GIT_TOKEN }}
           ref: main
 
-      - name: Update Image Tags in Helm Values
+      - name: Update Image Tags
         env:
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
           ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
         run: |
           echo "================================================"
-          echo "📝 Updating Helm values with image tag: $IMAGE_TAG"
+          echo "📝 Updating values.yaml with tag: $IMAGE_TAG"
           echo "================================================"
           
-          # 각 서비스의 values.yaml 업데이트
           for service in api-gateway customers vets visits; do
             VALUES_FILE="apps/${service}-service/values.yaml"
             
             if [ -f "$VALUES_FILE" ]; then
               echo "Updating ${service}-service..."
-              
-              # image.tag 업데이트
               sed -i "s|tag: .*|tag: ${IMAGE_TAG}|g" $VALUES_FILE
-              
-              # 또는 yq 사용 (더 안전)
-              # yq eval -i ".image.tag = \"${IMAGE_TAG}\"" $VALUES_FILE
             fi
           done
           
-          echo "✅ All values.yaml updated!"
+          echo "✅ All values.yaml files updated!"
 
-      - name: Commit and Push Changes
-        env:
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git add apps/*/values.yaml
-          
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "🚀 Update image tags to ${IMAGE_TAG}
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GIT_TOKEN }}
+          commit-message: "🚀 Deploy image tag ${{ needs.build-and-push.outputs.image-tag }}"
+          branch: deploy-${{ needs.build-and-push.outputs.image-tag }}
+          delete-branch: true
+          title: "🚀 Deploy ${{ needs.build-and-push.outputs.image-tag }}"
+          body: |
+            ## Deployment Request
             
-            Updated by GitHub Actions
-            Source commit: ${{ github.sha }}
-            Workflow: ${{ github.workflow }}"
+            **Image Tag:** `${{ needs.build-and-push.outputs.image-tag }}`
+            **Triggered by:** @${{ github.actor }}
+            **Source Commit:** [`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            **Workflow:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             
-            git push
+            ### 📦 Services Updated:
+            - `api-gateway-service`
+            - `customers-service`
+            - `vets-service`
+            - `visits-service`
             
-            echo "================================================"
-            echo "✅ GitOps repo updated successfully!"
-            echo "🔄 ArgoCD will sync automatically"
-            echo "================================================"
-          fi
-
-  # 📊 배포 완료 알림
-  notify-completion:
-    needs: update-gitops-repo
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Pipeline Complete
-        run: |
-          echo "================================================"
-          echo "✅ CI/CD Pipeline Completed!"
-          echo "================================================"
-          echo "📦 Images pushed to ECR"
-          echo "📝 GitOps repo updated"
-          echo "🔄 ArgoCD will deploy in 1-3 minutes"
-          echo ""
-          echo "Image Tag: ${{ needs.build-and-push.outputs.image-tag }}"
-          echo "================================================"
+            ### ✅ Review Checklist:
+            - [ ] Image tag is correct
+            - [ ] All services updated
+            - [ ] Ready for deployment to EKS
+            
+            ---
+            
+            **⚠️ Please review and approve before merging!**
+            
+            After merge, ArgoCD will automatically deploy to the cluster.
+          labels: |
+            deployment
+            automated
+            gitops
+          assignees: ${{ github.actor }}
