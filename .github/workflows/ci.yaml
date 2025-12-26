@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         # 실제 폴더 이름과 일치하는지 꼭 확인하세요!
-        service: [api-gateway, customers-service, vets-service, visits-service, config-server, discovery-server, admin-server]
+        service: [api-gateway-service, customers-service, vets-service, visits-service, frontend-service, ingress, rabbitmq]
 
     steps:
       - name: Checkout App Repo
